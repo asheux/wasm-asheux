@@ -7,6 +7,7 @@ extern crate web_sys;
 use wasm_bindgen::prelude::*;
 use serde::ser::{Serialize, Serializer, SerializeStruct};
 use wasm_bindgen::JsValue;
+use std::path::{PathBuf};
 
 
 // A macro to provide `println!(..)`-style syntax for `console.log` logging.
@@ -66,6 +67,7 @@ impl Main {
             "/" => dict_instance.get_tags(),
             "/about" => dict_instance.get_about(),
             "/projects" => dict_instance.get_projects(),
+            "/downloadcv" => dict_instance.get_projects(),
             mapped_route if mapped_route == route => String::new().into(),
             _ => "Page not found".to_string().into(),
         }
