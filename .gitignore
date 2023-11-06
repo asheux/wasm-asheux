@@ -9,3 +9,4 @@ wasm-pack.log
 
 # Vim stuff
 *.sw?
+.env

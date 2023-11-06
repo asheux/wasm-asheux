@@ -1,19 +1,23 @@
 mod utils;
 
-extern crate serde;
 extern crate serde_json;
 extern crate web_sys;
+
+use std::io::{Error, ErrorKind};
+use std::collections::BTreeMap;
+use std::fmt;
 
 use wasm_bindgen::prelude::*;
 use serde::ser::{Serialize, Serializer, SerializeStruct};
 use wasm_bindgen::JsValue;
-use std::path::{PathBuf};
+use lopdf::{Document};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 
 // A macro to provide `println!(..)`-style syntax for `console.log` logging.
 macro_rules! log {
     ( $( $t:tt )* ) => {
-        web_sys::console::log_1(&format!( $( $t )* ).into());
+        web_sys::console::log_1(&format!( $( $t )* ).into())
     }
 }
 
@@ -29,6 +33,50 @@ pub struct Main {
 pub struct Dictionary {
     name: String,
     tag: String,
+}
+
+#[derive(Debug)]
+pub struct PdfText {
+    text: BTreeMap<u32, Vec<String>>,
+    errors: Vec<String>
+}
+
+impl fmt::Display for PdfText {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+fn get_pdf_text(pdf_data: &[u8]) -> Result<PdfText, Error> {
+    let mut pdf_text: PdfText = PdfText {
+        text: BTreeMap::new(),
+        errors: Vec::new()
+    };
+    let mut doc = Document::load_mem(&pdf_data).map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+    let pages: Vec<Result<(u32, Vec<String>), Error>> = doc
+        .get_pages()
+        .into_par_iter()
+        .map(
+            |(page_num, page_id): (u32, (u32, u16))| -> Result<(u32, Vec<String>), Error> { 
+                let text = doc.extract_text(&[page_num]).map_err(|e| {
+                    Error::new(ErrorKind::Other, e.to_string())
+                })?;
+                Ok((page_num, text.split('\n').map(|s| s.trim_end().to_string()).collect::<Vec<String>>()))
+            }
+        )
+        .collect();
+
+    for page in pages {
+        match page {
+            Ok((page_num, line)) => {
+                pdf_text.text.insert(page_num, line);
+            },
+            Err(e) => {
+                pdf_text.errors.push(e.to_string());
+            }
+        }
+    }
+    Ok(pdf_text)
 }
 
 #[wasm_bindgen]
@@ -56,22 +104,31 @@ impl Main {
         }
     }
 
-    pub fn handle_route(&self, _id: u8) -> JsValue {
+    pub fn handle_route(&self, _id: u8, pdf_data: &[u8]) -> JsValue {
         // Handling routes: return the specific route using clicks
         let route: &str = &self.get_route();
         let dict_instance = Dictionary::new();
-        let _mapped_route = format!("/articles/{_id}");
         log!("Current route: {}", route);
-        log!("Mapped current route: {}", _mapped_route);
+        log!("Mapped current route: {pdf_data:?}");
         match route {
             "/" => dict_instance.get_tags(),
             "/about" => dict_instance.get_about(),
             "/projects" => dict_instance.get_projects(),
-            "/downloadcv" => dict_instance.get_projects(),
+            "/view_cv" => self.get_pdf_data(pdf_data),
             mapped_route if mapped_route == route => String::new().into(),
             _ => "Page not found".to_string().into(),
         }
     }
+
+    pub fn get_pdf_data(&self, pdf_data: &[u8]) -> JsValue {
+        // let text = get_pdf_text(pdf_data);
+        // log!("Text here: {text:?}");
+        let json_data = serde_json::to_string(&vec![Dictionary {
+            name: "Download page not implemented yet! Stay tuned.".to_string(),
+            tag: "None".to_string()
+        }]).unwrap();   
+        JsValue::from_str(&json_data)
+    } 
 }
 
 
