@@ -96,8 +96,10 @@ impl Main {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Main {
         utils::set_panic_hook();
-        let route = web_sys::window().unwrap().location().pathname().unwrap();
-        log!("Current route: {}", route);
+        let mut route = web_sys::window().unwrap().location().pathname().unwrap();
+        if route.len() != 1 && route.as_bytes()[route.len() - 1] as char == '/' {
+            route = route[0..route.len() - 1].to_string();
+        }
         Main { 
             name: "Brian Mboya".to_string(),
             route: route
@@ -106,10 +108,14 @@ impl Main {
 
     pub fn handle_route(&self, _id: u8, pdf_data: &[u8]) -> JsValue {
         // Handling routes: return the specific route using clicks
-        let route: &str = &self.get_route();
+        let mut route: &str = &self.get_route();
+        if route.len() != 1 && route.as_bytes()[route.len() - 1] as char == '/' {
+            route = &route[0..route.len() - 1];
+        }
         let dict_instance = Dictionary::new();
+        let mapped_route = format!("/articles/{_id}");
         log!("Current route: {}", route);
-        log!("Mapped current route: {pdf_data:?}");
+        log!("Mapped current route: {}", mapped_route);
         match route {
             "/" => dict_instance.get_tags(),
             "/about" => dict_instance.get_about(),
