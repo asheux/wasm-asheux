@@ -2,6 +2,8 @@ mod utils;
 
 extern crate serde_json;
 extern crate web_sys;
+extern crate urlparse;
+extern crate queues;
 
 use std::io::{Error, ErrorKind};
 use std::collections::BTreeMap;
@@ -12,6 +14,9 @@ use serde::ser::{Serialize, Serializer, SerializeStruct};
 use wasm_bindgen::JsValue;
 use lopdf::{Document};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use urlparse::urlparse;
+// use regex::bytes::Regex;
+use queues::*;
 
 
 // A macro to provide `println!(..)`-style syntax for `console.log` logging.
@@ -39,6 +44,71 @@ pub struct Dictionary {
 pub struct PdfText {
     text: BTreeMap<u32, Vec<String>>,
     errors: Vec<String>
+}
+
+#[wasm_bindgen]
+#[derive(Debug)]
+pub struct Crawler {
+    roots: Vec<String>,
+    q: Queue<String>,
+    root_domains: Vec<String>,
+}
+
+#[wasm_bindgen]
+impl Crawler {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Crawler {
+        utils::set_panic_hook();
+        let roots = vec![];
+        let q = queue![];
+        Crawler {
+            roots: roots.clone(),
+            q: q,
+            root_domains: roots.clone()
+        }
+    }
+
+    pub fn init_roots(&mut self) {
+        // parse urls 
+        let mut root_domains: Vec<String> = vec![];
+        // let re = Regex::new(r"\A[\d\.]*\Z").unwrap(); // Match IP address: 192.168.0.1
+        for root in &self.roots {
+            // fix url
+            let _root: String;
+            if !root.contains("://") {
+                _root = format!("http://{}", &root);
+            } else {
+                _root = root.to_owned();
+            } 
+            // Url parse
+            let url = urlparse(_root.clone());
+            let netloc_list: Vec<_> = url.netloc.split(":").collect();
+            let netloc_list_len = netloc_list.len();
+            let mut host: String = "".to_string();
+
+            if netloc_list_len > 1 {
+                host = netloc_list[0].to_string();
+            } else if netloc_list_len == 1 {
+                host = netloc_list[0].to_string();
+            }
+            if host == "" {
+                continue
+            }
+            root_domains.push(host);
+            let _ = self.q.add(_root.clone());
+        }
+        self.root_domains = root_domains;
+    }
+
+    pub fn crawl(&self) {
+        log!("ROOT DOMAINS: {0:?}", self.root_domains);
+    }
+
+    pub fn set_roots(&mut self, roots_str: &str) {
+        // Set the user url inputs to the crawler
+        let roots = roots_str.split(",").map(|s| s.into());
+        self.roots = roots.collect::<Vec<_>>();
+    }
 }
 
 impl fmt::Display for PdfText {
