@@ -254,6 +254,9 @@ impl Dictionary {
             "PE",
             "Is it?",
             "0x1: A Godless world or not?",
+            "What am I?",
+            "0x2: Unknown",
+            "0x2: Not Not Single",
             "The Real",
             "Could a meme make mind?",
             "F**k red & blue. I want the green pill",
@@ -265,9 +268,6 @@ impl Dictionary {
             "Save Yourselves",
             "The RTC",
             "Unexplored light",
-            "What am I?",
-            "0x2: Unknown",
-            "0x2: Not Not Single",
         ].into_iter().map(|i| i.to_string()).collect();
         let tags: Vec<String> = vec![
             "1,Programming,AI",
@@ -278,6 +278,9 @@ impl Dictionary {
             "0,PE",
             "5,Poetry,Consciousness,Mind,AI",
             "21,God,Worlds,FreeWill,Essay,Consciousness",
+            "18,Consciousness,Poetry,Unconsciousness",
+            "19,Consciousness,Essay,God,FreeWill,Simulation",
+            "20,Consciousness,Essay,God,FreeWill,Simulation",
             "6,Poetry,Consciousness,Imagination",
             "7,Consciousness,Poetry,AI,Memes,Richard Dawkins",
             "8,Poetry,Love,Consciousness",
@@ -289,9 +292,6 @@ impl Dictionary {
             "15,Poetry,Consciousness,Imagination",
             "16,Poetry,Imagination,Consciousness,Unknown",
             "17,Poetry,Otherworlds,Minds,Consciousness,TheoryOfMind",
-            "18,Consciousness,Poetry,Unconsciousness",
-            "19,Consciousness,Essay,God,FreeWill,Simulation",
-            "20,Consciousness,Essay,God,FreeWill,Simulation",
         ].into_iter().map(|i| i.to_string()).collect();
         let dictionaries: Vec<Dictionary> = names
             .into_iter()
