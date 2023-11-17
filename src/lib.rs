@@ -3,11 +3,12 @@ mod utils;
 extern crate serde_json;
 extern crate web_sys;
 extern crate urlparse;
-extern crate queues;
+// extern crate queues;
 
 use std::io::{Error, ErrorKind};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap,VecDeque};
 use std::fmt;
+// use std::thread;
 
 use wasm_bindgen::prelude::*;
 use serde::ser::{Serialize, Serializer, SerializeStruct};
@@ -15,8 +16,9 @@ use wasm_bindgen::JsValue;
 use lopdf::{Document};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use urlparse::urlparse;
+use web_sys::{RequestInit, RequestMode, Request, window, Response};
 // use regex::bytes::Regex;
-use queues::*;
+// use queues::*;
 
 
 // A macro to provide `println!(..)`-style syntax for `console.log` logging.
@@ -50,7 +52,7 @@ pub struct PdfText {
 #[derive(Debug)]
 pub struct Crawler {
     roots: Vec<String>,
-    q: Queue<String>,
+    q: VecDeque<String>,
     root_domains: Vec<String>,
 }
 
@@ -60,7 +62,7 @@ impl Crawler {
     pub fn new() -> Crawler {
         utils::set_panic_hook();
         let roots = vec![];
-        let q = queue![];
+        let q = VecDeque::new();
         Crawler {
             roots: roots.clone(),
             q: q,
@@ -76,7 +78,7 @@ impl Crawler {
             // fix url
             let _root: String;
             if !root.contains("://") {
-                _root = format!("http://{}", &root);
+                _root = format!("https://{}", &root);
             } else {
                 _root = root.to_owned();
             } 
@@ -86,6 +88,7 @@ impl Crawler {
             let netloc_list_len = netloc_list.len();
             let mut host: String = "".to_string();
 
+            log!("USUSUSUUSUSUS: {0:?}", url.netloc);
             if netloc_list_len > 1 {
                 host = netloc_list[0].to_string();
             } else if netloc_list_len == 1 {
@@ -94,14 +97,72 @@ impl Crawler {
             if host == "" {
                 continue
             }
+            if !host.starts_with("https://") {
+                host = "https://".to_string() + &host;
+            }
             root_domains.push(host);
-            let _ = self.q.add(_root.clone());
         }
         self.root_domains = root_domains;
     }
 
-    pub fn crawl(&self) {
-        log!("ROOT DOMAINS: {0:?}", self.root_domains);
+    pub fn add_url_to_queue(&mut self) {
+        for rdomain in &self.root_domains {
+            self.q.push_back(rdomain.clone());
+        }
+    }
+
+    pub fn crawl(&mut self) {
+        self.add_url_to_queue(); // Add to queue
+        log!("ROOT DOMAINS: {0:?}", self.q);
+
+        while let Some(url) = self.q.pop_front() {
+            self.fetch(url);
+        }
+        // for _ in 0..10 { // Workers
+        //     // process queue items forever
+        //     thread::spawn(move || {
+        //         while let Some(url) = self.q.pop_front() {
+        //             self.fetch(url);
+        //         }
+        //     });
+        // }
+    }
+
+    pub fn fetch(&mut self, url: String) {
+        log!("URURURURURURL: {url:?}");
+        let mut init = RequestInit::new();
+        init.method("GET").mode(RequestMode::Cors);
+
+        let request = Request::new_with_str_and_init(&url, &init).unwrap();
+        let window = window().unwrap();
+
+        let mut tries = 0;
+        let mut promise_response = None;
+
+        while tries < 4 {
+            promise_response = Some(window.fetch_with_request(&request));
+
+            if tries > 1 {
+                log!("try {tries:?} for {url:?} success");
+            }
+            tries += 1;
+        }
+        let fetch_future = wasm_bindgen_futures::JsFuture::from(promise_response.unwrap());
+
+        wasm_bindgen_futures::spawn_local(async move {
+            match fetch_future.await {
+                Ok(response_value) => {
+                    let response: Response = response_value.dyn_into().unwrap();
+                    if response.ok() {
+                        let body_promise = response.text();
+                        log!("RESPONSE: {body_promise:?}");
+                    }
+                }
+                Err(err) => {
+                    web_sys::console::error_1(&format!("Error making request: {:?}", err).into());
+                }
+            }
+        });
     }
 
     pub fn set_roots(&mut self, roots_str: &str) {
