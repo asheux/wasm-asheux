@@ -3,22 +3,15 @@ mod utils;
 extern crate serde_json;
 extern crate web_sys;
 extern crate urlparse;
-// extern crate queues;
 
-use std::io::{Error, ErrorKind};
-use std::collections::{BTreeMap,VecDeque};
-use std::fmt;
-// use std::thread;
+use std::collections::{VecDeque};
 
 use wasm_bindgen::prelude::*;
 use serde::ser::{Serialize, Serializer, SerializeStruct};
 use wasm_bindgen::JsValue;
-use lopdf::{Document};
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use urlparse::urlparse;
 use web_sys::{RequestInit, RequestMode, Request, window, Response};
 // use regex::bytes::Regex;
-// use queues::*;
 
 
 // A macro to provide `println!(..)`-style syntax for `console.log` logging.
@@ -40,12 +33,6 @@ pub struct Main {
 pub struct Dictionary {
     name: String,
     tag: String,
-}
-
-#[derive(Debug)]
-pub struct PdfText {
-    text: BTreeMap<u32, Vec<String>>,
-    errors: Vec<String>
 }
 
 #[wasm_bindgen]
@@ -88,7 +75,6 @@ impl Crawler {
             let netloc_list_len = netloc_list.len();
             let mut host: String = "".to_string();
 
-            log!("USUSUSUUSUSUS: {0:?}", url.netloc);
             if netloc_list_len > 1 {
                 host = netloc_list[0].to_string();
             } else if netloc_list_len == 1 {
@@ -113,7 +99,6 @@ impl Crawler {
 
     pub fn crawl(&mut self) {
         self.add_url_to_queue(); // Add to queue
-        log!("ROOT DOMAINS: {0:?}", self.q);
 
         while let Some(url) = self.q.pop_front() {
             self.fetch(url);
@@ -129,7 +114,6 @@ impl Crawler {
     }
 
     pub fn fetch(&mut self, url: String) {
-        log!("URURURURURURL: {url:?}");
         let mut init = RequestInit::new();
         init.method("GET").mode(RequestMode::Cors);
 
@@ -172,44 +156,6 @@ impl Crawler {
     }
 }
 
-impl fmt::Display for PdfText {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
-    }
-}
-
-fn get_pdf_text(pdf_data: &[u8]) -> Result<PdfText, Error> {
-    let mut pdf_text: PdfText = PdfText {
-        text: BTreeMap::new(),
-        errors: Vec::new()
-    };
-    let mut doc = Document::load_mem(&pdf_data).map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-    let pages: Vec<Result<(u32, Vec<String>), Error>> = doc
-        .get_pages()
-        .into_par_iter()
-        .map(
-            |(page_num, page_id): (u32, (u32, u16))| -> Result<(u32, Vec<String>), Error> { 
-                let text = doc.extract_text(&[page_num]).map_err(|e| {
-                    Error::new(ErrorKind::Other, e.to_string())
-                })?;
-                Ok((page_num, text.split('\n').map(|s| s.trim_end().to_string()).collect::<Vec<String>>()))
-            }
-        )
-        .collect();
-
-    for page in pages {
-        match page {
-            Ok((page_num, line)) => {
-                pdf_text.text.insert(page_num, line);
-            },
-            Err(e) => {
-                pdf_text.errors.push(e.to_string());
-            }
-        }
-    }
-    Ok(pdf_text)
-}
-
 #[wasm_bindgen]
 impl Main {
     pub fn get_name(&self) -> String {
@@ -237,7 +183,7 @@ impl Main {
         }
     }
 
-    pub fn handle_route(&self, _id: u8, pdf_data: &[u8]) -> JsValue {
+    pub fn handle_route(&self, _id: u8) -> JsValue {
         // Handling routes: return the specific route using clicks
         let mut route: &str = &self.get_route();
         if route.len() != 1 && route.as_bytes()[route.len() - 1] as char == '/' {
@@ -251,21 +197,11 @@ impl Main {
             "/" => dict_instance.get_tags(),
             "/about" => dict_instance.get_about(),
             "/projects" => dict_instance.get_projects(),
-            "/view_cv" => self.get_pdf_data(pdf_data),
+            "/view_cv" => "PDF Data".to_string().into(),
             mapped_route if mapped_route == route => String::new().into(),
             _ => "Page not found".to_string().into(),
         }
     }
-
-    pub fn get_pdf_data(&self, pdf_data: &[u8]) -> JsValue {
-        // let text = get_pdf_text(pdf_data);
-        // log!("Text here: {text:?}");
-        let json_data = serde_json::to_string(&vec![Dictionary {
-            name: "Download page not implemented yet! Stay tuned.".to_string(),
-            tag: "None".to_string()
-        }]).unwrap();   
-        JsValue::from_str(&json_data)
-    } 
 }
 
 
