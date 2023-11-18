@@ -1,5 +1,5 @@
 [package]
-name = "wasm-router-handler"
+name = "wasm-asheux"
 version = "0.1.0"
 authors = ["asheux <brian.mboya@protonmail.com>"]
 edition = "2018"
