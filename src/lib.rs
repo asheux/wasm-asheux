@@ -115,7 +115,7 @@ impl Crawler {
 
     pub fn fetch(&mut self, url: String) {
         let mut init = RequestInit::new();
-        init.method("GET").mode(RequestMode::Cors);
+        init.method("GET").mode(RequestMode::NoCors);
 
         let request = Request::new_with_str_and_init(&url, &init).unwrap();
         let window = window().unwrap();
@@ -123,7 +123,7 @@ impl Crawler {
         let mut tries = 0;
         let mut promise_response = None;
 
-        while tries < 4 {
+        while tries < 10 {
             promise_response = Some(window.fetch_with_request(&request));
 
             if tries > 1 {
@@ -137,9 +137,12 @@ impl Crawler {
             match fetch_future.await {
                 Ok(response_value) => {
                     let response: Response = response_value.dyn_into().unwrap();
+                    log!("THIS IS HERE: {0:?}", response.ok());
                     if response.ok() {
                         let body_promise = response.text();
-                        log!("RESPONSE: {body_promise:?}");
+                        let body = wasm_bindgen_futures::JsFuture::from(body_promise.unwrap()).await.unwrap();
+                    } else {
+                        log!("RESPONSE: {0:?}", response.url());
                     }
                 }
                 Err(err) => {
@@ -246,7 +249,7 @@ impl Dictionary {
             "Generating all subsets using basic Combinatorial Patterns",
             "Uninformed search in Artificial Intelligence",
             "Encoding logic in Artificial Intelligence",
-            "Encoding logic in AI using Theorem Proving",
+            "Encoding logic in Artificial Intelligence using Theorem Proving",
             "Lexicographic permutation generation",
             "PE",
             "Is it?",
@@ -267,24 +270,24 @@ impl Dictionary {
             "Unexplored light",
         ].into_iter().map(|i| i.to_string()).collect();
         let tags: Vec<String> = vec![
-            "1,Programming,AI",
-            "2,Programming,AI",
-            "3,Programming,AI",
-            "4,Programming,AI",
+            "1,Combinatorics,Programming,Artificial Intelligence",
+            "2,Search,Programming,Artificial Intelligence",
+            "3,Logic,Knowledge,Programming,Artificial Intelligence",
+            "4,Logic,Knowledge,Programming,Artificial Intelligence",
             "14,Combinatorics,Algorithms,Python,Permutations,Lexicographic",
             "0,PE",
-            "5,Poetry,Consciousness,Mind,AI",
+            "5,Poetry,Consciousness,Mind,Artificial Intelligence",
             "21,God,Worlds,FreeWill,Essay,Consciousness",
             "18,Consciousness,Poetry,Unconsciousness",
             "19,Consciousness,Essay,God,FreeWill,Simulation",
             "20,Consciousness,Essay,God,FreeWill,Simulation",
             "6,Poetry,Consciousness,Imagination",
-            "7,Consciousness,Poetry,AI,Memes,Richard Dawkins",
+            "7,Consciousness,Poetry,Artificial Intelligence,Memes,Richard Dawkins",
             "8,Poetry,Love,Consciousness",
             "9,Poetry,Consciousness,Escape,Mind",
             "10,Poetry,Consciousness,Imagination",
             "11,Love,Poetry,Consciousness,Imagination",
-            "12,AI,Dreams,Mind,Consciousness,Imagination",
+            "12,Artificial Intelligence,Dreams,Mind,Consciousness,Imagination",
             "13,Imagination,Consciousness,Poetry",
             "15,Poetry,Consciousness,Imagination",
             "16,Poetry,Imagination,Consciousness,Unknown",
