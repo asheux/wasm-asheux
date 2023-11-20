@@ -10,8 +10,9 @@ use wasm_bindgen::prelude::*;
 use serde::ser::{Serialize, Serializer, SerializeStruct};
 use wasm_bindgen::JsValue;
 use urlparse::urlparse;
+use urlparse::urlunparse;
 use web_sys::{RequestInit, RequestMode, Request, window, Response};
-// use regex::bytes::Regex;
+use regex::Regex;
 
 
 // A macro to provide `println!(..)`-style syntax for `console.log` logging.
@@ -71,6 +72,7 @@ impl Crawler {
             } 
             // Url parse
             let url = urlparse(_root.clone());
+            // ('host:port') --> ['host', 'port']. We assume host and port are valid
             let netloc_list: Vec<_> = url.netloc.split(":").collect();
             let netloc_list_len = netloc_list.len();
             let mut host: String = "".to_string();
@@ -80,13 +82,13 @@ impl Crawler {
             } else if netloc_list_len == 1 {
                 host = netloc_list[0].to_string();
             }
-            if host == "" {
+            if host.is_empty() {
                 continue
             }
             if !host.starts_with("https://") {
                 host = "https://".to_string() + &host;
             }
-            root_domains.push(host);
+            root_domains.push(host.to_lowercase());
         }
         self.root_domains = root_domains;
     }
@@ -103,27 +105,20 @@ impl Crawler {
         while let Some(url) = self.q.pop_front() {
             self.fetch(url);
         }
-        // for _ in 0..10 { // Workers
-        //     // process queue items forever
-        //     thread::spawn(move || {
-        //         while let Some(url) = self.q.pop_front() {
-        //             self.fetch(url);
-        //         }
-        //     });
-        // }
     }
 
     pub fn fetch(&mut self, url: String) {
+        let proxified = format!("http://127.0.0.1:5000/crawl?url={}", url); // TODO: Use prod link
         let mut init = RequestInit::new();
-        init.method("GET").mode(RequestMode::NoCors);
+        init.method("GET").mode(RequestMode::Cors);
 
-        let request = Request::new_with_str_and_init(&url, &init).unwrap();
+        let request = Request::new_with_str_and_init(&proxified, &init).unwrap();
         let window = window().unwrap();
 
         let mut tries = 0;
         let mut promise_response = None;
 
-        while tries < 10 {
+        while tries < 4 {
             promise_response = Some(window.fetch_with_request(&request));
 
             if tries > 1 {
@@ -137,12 +132,16 @@ impl Crawler {
             match fetch_future.await {
                 Ok(response_value) => {
                     let response: Response = response_value.dyn_into().unwrap();
-                    log!("THIS IS HERE: {0:?}", response.ok());
                     if response.ok() {
                         let body_promise = response.text();
                         let body = wasm_bindgen_futures::JsFuture::from(body_promise.unwrap()).await.unwrap();
+                        if let Some(result) = body.as_string() {
+                            Crawler::parse_links(url, result);
+                        } else {
+                            log!("Cannot extract value from JsValue");
+                        }
                     } else {
-                        log!("RESPONSE: {0:?}", response.url());
+                        log!("Error: {0:?}", response.url());
                     }
                 }
                 Err(err) => {
@@ -150,6 +149,71 @@ impl Crawler {
                 }
             }
         });
+    }
+
+    pub fn parse_links(url: String, result: String) {
+        let re = Regex::new(r#"(?i)href=[\"']([^\s\"'<>]+)"#).unwrap();
+        let matches: Vec<_> = re.captures_iter(&result).collect();
+        let links: Vec<String> = matches
+            .into_iter()
+            .filter_map(|caps| caps.get(1).map(|m| m.as_str().to_string()))
+            .collect();
+
+        for link in links {
+
+            if link.contains("css") || link.contains("ico") {
+                continue
+            }
+
+            let new_link = Crawler::urljoin(url.clone(), link);
+            log!("NEW LINK: {new_link:?}");
+            // TODO: Code urldefrag()
+        }
+    }
+
+    pub fn urljoin(base: String, url: String) -> String {
+        let uses_relative: Vec<String> = vec![
+            "", "ftp", "http", "gopher", "nntp", "imap",
+            "wais", "file", "https", "shttp", "mms",
+            "prospero", "rtsp", "rtsps", "rtspu", "sftp",
+            "svn", "svn+ssh", "ws", "wss"
+        ].into_iter().map(|s| s.to_string()).collect();
+        let uses_netloc: Vec<String> = vec![
+            "", "ftp", "http", "gopher", "nntp", "telnet",
+            "imap", "wais", "file", "mms", "https", "shttp",
+            "snews", "prospero", "rtsp", "rtsps", "rtspu", "rsync",
+            "svn", "svn+ssh", "sftp", "nfs", "git", "git+ssh",
+            "ws", "wss", "itms-services"
+        ].into_iter().map(|s| s.to_string()).collect();
+
+        if base.is_empty() {
+            return url;
+        }
+        if url.is_empty() {
+            return base;
+        }
+        let bparsed = urlparse(base.clone());
+        let uparsed = urlparse(url.clone()); 
+        if !uses_relative.contains(&uparsed.scheme) {
+            return url;
+        }
+        let mut netloc = uparsed.netloc.clone();
+        let mut path = uparsed.path.clone();
+
+        if uses_netloc.contains(&bparsed.scheme) {
+            if !netloc.is_empty() {
+                let mut _link = bparsed.scheme.clone() + "://" + &netloc + &path;
+                return urlunparse(urlparse(_link)); // Returns url string
+            }
+            netloc = bparsed.netloc.clone(); 
+        } 
+        if path.is_empty() {
+            path = bparsed.path.clone();
+            let newlink = bparsed.scheme.clone() + "://" + &netloc + &path;
+            return urlunparse(urlparse(newlink));
+        } 
+        let nlink = bparsed.scheme.clone() + "://" + &netloc + &path;
+        return nlink;
     }
 
     pub fn set_roots(&mut self, roots_str: &str) {
