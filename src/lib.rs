@@ -3,15 +3,15 @@ mod utils;
 extern crate serde_json;
 extern crate web_sys;
 extern crate urlparse;
+extern crate serde_wasm_bindgen;
 
-use std::collections::{VecDeque};
+use std::collections::{VecDeque, HashSet};
 
 use wasm_bindgen::prelude::*;
 use serde::ser::{Serialize, Serializer, SerializeStruct};
 use wasm_bindgen::JsValue;
 use urlparse::urlparse;
 use urlparse::urlunparse;
-use web_sys::{RequestInit, RequestMode, Request, window, Response};
 use regex::Regex;
 
 
@@ -37,11 +37,12 @@ pub struct Dictionary {
 }
 
 #[wasm_bindgen]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Crawler {
     roots: Vec<String>,
     q: VecDeque<String>,
-    root_domains: Vec<String>,
+    root_domains: HashSet<String>,
+    seen_urls: HashSet<String>,
 }
 
 #[wasm_bindgen]
@@ -50,17 +51,19 @@ impl Crawler {
     pub fn new() -> Crawler {
         utils::set_panic_hook();
         let roots = vec![];
-        let q = VecDeque::new();
+        let root_domains = HashSet::new();
+        let queue = VecDeque::new();
         Crawler {
-            roots: roots.clone(),
-            q: q,
-            root_domains: roots.clone()
+            roots: roots,
+            q: queue,
+            root_domains: root_domains.clone(),
+            seen_urls: root_domains.clone()
         }
     }
 
     pub fn init_roots(&mut self) {
         // parse urls 
-        let mut root_domains: Vec<String> = vec![];
+        let mut root_domains: HashSet<String> = HashSet::new();
         // let re = Regex::new(r"\A[\d\.]*\Z").unwrap(); // Match IP address: 192.168.0.1
         for root in &self.roots {
             // fix url
@@ -88,7 +91,7 @@ impl Crawler {
             if !host.starts_with("https://") {
                 host = "https://".to_string() + &host;
             }
-            root_domains.push(host.to_lowercase());
+            root_domains.insert(host.to_lowercase());
         }
         self.root_domains = root_domains;
     }
@@ -99,59 +102,66 @@ impl Crawler {
         }
     }
 
-    pub fn crawl(&mut self) {
+    pub async fn crawl(&mut self, limit: u8) -> JsValue {
         self.add_url_to_queue(); // Add to queue
 
         while let Some(url) = self.q.pop_front() {
-            self.fetch(url);
+            if !self.seen_urls.contains(&url) {
+                self.fetch(url).await;
+            }
+            if self.seen_urls.len() >= limit as usize {
+                break;
+            }
         }
+        let hash_set_queue: HashSet<String> = self.q.clone().into_iter().collect();
+        let union: HashSet<_> = self.seen_urls.union(&hash_set_queue).collect();
+        serde_wasm_bindgen::to_value::<HashSet<&String>>(&union).unwrap()
     }
 
-    pub fn fetch(&mut self, url: String) {
+    pub async fn fetch(&mut self, url: String) {
         let proxified = format!("http://127.0.0.1:5000/crawl?url={}", url); // TODO: Use prod link
-        let mut init = RequestInit::new();
-        init.method("GET").mode(RequestMode::Cors);
-
-        let request = Request::new_with_str_and_init(&proxified, &init).unwrap();
-        let window = window().unwrap();
-
         let mut tries = 0;
-        let mut promise_response = None;
+        let mut response = None;
 
         while tries < 4 {
-            promise_response = Some(window.fetch_with_request(&request));
+            response = Some(reqwest::get(proxified.clone()).await);
 
-            if tries > 1 {
+            if response.is_some() {
                 log!("try {tries:?} for {url:?} success");
+                break;
             }
             tries += 1;
         }
-        let fetch_future = wasm_bindgen_futures::JsFuture::from(promise_response.unwrap());
-
-        wasm_bindgen_futures::spawn_local(async move {
-            match fetch_future.await {
-                Ok(response_value) => {
-                    let response: Response = response_value.dyn_into().unwrap();
-                    if response.ok() {
-                        let body_promise = response.text();
-                        let body = wasm_bindgen_futures::JsFuture::from(body_promise.unwrap()).await.unwrap();
-                        if let Some(result) = body.as_string() {
-                            Crawler::parse_links(url, result);
-                        } else {
-                            log!("Cannot extract value from JsValue");
+        match response.unwrap() {
+            Ok(res) => {
+                if res.status() == 200 {
+                    let body = res.text().await;
+                    let links = self.parse_links(&url, &body.unwrap());
+                    let urls = serde_wasm_bindgen::from_value::<Vec<String>>(links);
+                    match urls {
+                        Ok(r) => {
+                            for u in r {
+                                self.q.push_back(u);
+                            }
+                            self.seen_urls.insert(url);
                         }
-                    } else {
-                        log!("Error: {0:?}", response.url());
+                        Err(e) => {
+                            web_sys::console::error_1(
+                                &format!("Error making request: {:?}", e).into()
+                            );
+                        }
                     }
                 }
-                Err(err) => {
-                    web_sys::console::error_1(&format!("Error making request: {:?}", err).into());
-                }
             }
-        });
+            Err(err) => {
+                web_sys::console::error_1(
+                    &format!("Error making request: {:?}", err).into()
+                );
+            }
+        };
     }
 
-    pub fn parse_links(url: String, result: String) {
+    pub fn parse_links(&mut self, url: &str, result: &str) -> JsValue {
         let re = Regex::new(r#"(?i)href=[\"']([^\s\"'<>]+)"#).unwrap();
         let matches: Vec<_> = re.captures_iter(&result).collect();
         let links: Vec<String> = matches
@@ -159,19 +169,19 @@ impl Crawler {
             .filter_map(|caps| caps.get(1).map(|m| m.as_str().to_string()))
             .collect();
 
+        let mut found_links: HashSet<String> = HashSet::new();
         for link in links {
-
             if link.contains("css") || link.contains("ico") {
                 continue
             }
 
-            let new_link = Crawler::urljoin(url.clone(), link);
-            log!("NEW LINK: {new_link:?}");
-            // TODO: Code urldefrag()
+            let new_link = self.urljoin(url, &link);
+            found_links.insert(new_link);
         }
+        serde_wasm_bindgen::to_value(&found_links).unwrap()
     }
 
-    pub fn urljoin(base: String, url: String) -> String {
+    pub fn urljoin(&self, base: &str, url: &str) -> String {
         let uses_relative: Vec<String> = vec![
             "", "ftp", "http", "gopher", "nntp", "imap",
             "wais", "file", "https", "shttp", "mms",
@@ -187,15 +197,15 @@ impl Crawler {
         ].into_iter().map(|s| s.to_string()).collect();
 
         if base.is_empty() {
-            return url;
+            return url.to_string();
         }
         if url.is_empty() {
-            return base;
+            return base.to_string();
         }
-        let bparsed = urlparse(base.clone());
-        let uparsed = urlparse(url.clone()); 
+        let bparsed = urlparse(base);
+        let uparsed = urlparse(url); 
         if !uses_relative.contains(&uparsed.scheme) {
-            return url;
+            return url.to_string();
         }
         let mut netloc = uparsed.netloc.clone();
         let mut path = uparsed.path.clone();
@@ -213,7 +223,7 @@ impl Crawler {
             return urlunparse(urlparse(newlink));
         } 
         let nlink = bparsed.scheme.clone() + "://" + &netloc + &path;
-        return nlink;
+        return nlink.to_string();
     }
 
     pub fn set_roots(&mut self, roots_str: &str) {
@@ -257,13 +267,11 @@ impl Main {
             route = &route[0..route.len() - 1];
         }
         let dict_instance = Dictionary::new();
-        let mapped_route = format!("/articles/{_id}");
-        log!("Current route: {}", route);
-        log!("Mapped current route: {}", mapped_route);
+
         match route {
             "/" => dict_instance.get_tags(),
-            "/about" => dict_instance.get_about(),
-            "/projects" => dict_instance.get_projects(),
+            "/about" => "About page".to_string().into(),
+            "/projects" => "Project Crawl".to_string().into(),
             "/view_cv" => "PDF Data".to_string().into(),
             mapped_route if mapped_route == route => String::new().into(),
             _ => "Page not found".to_string().into(),
@@ -274,7 +282,6 @@ impl Main {
 
 #[wasm_bindgen]
 impl Dictionary {
-    // Constructor
     #[wasm_bindgen(constructor)]
     pub fn new() -> Dictionary {
         utils::set_panic_hook();
@@ -284,30 +291,7 @@ impl Dictionary {
         }
     }
 
-    // TODO: Add database functionality
-    pub fn get_projects(&self) -> JsValue {
-        let json_data = serde_json::to_string(&vec![Dictionary {
-            name: "Project page not implemented yet! Stay tuned.".to_string(),
-            tag: "None".to_string()
-        }]).unwrap();
-        JsValue::from_str(&json_data)
-    }
-
-    // TODO: Add database functionality
-    pub fn get_about(&self) -> JsValue {
-        let json_data = serde_json::to_string(&vec![Dictionary {
-            name: "About page not implemented yet! Stay tuned.".to_string(),
-            tag: "None".to_string()
-        }]).unwrap();
-        JsValue::from_str(&json_data)
-    }
-
-    // Function to retrieve dictionary entriess from Database
-    // TODO: Add database functionality
     pub fn get_tags(&self) -> JsValue {
-        // For example
-        // let entries = database::query("SELECT key, value FROM dictionaries");
-        
         // Dummy data: TODO: remove
         let names: Vec<String> = vec![
             "Generating all subsets using basic Combinatorial Patterns",
@@ -362,9 +346,7 @@ impl Dictionary {
             .zip(tags)
             .map(|(name, tag)| Dictionary { name, tag })
             .collect();
-
-        let json_data = serde_json::to_string(&dictionaries).unwrap();
-        JsValue::from_str(&json_data)
+        serde_wasm_bindgen::to_value(&dictionaries).unwrap()
     }
 }
 
