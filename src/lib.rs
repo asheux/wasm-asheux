@@ -5,7 +5,7 @@ extern crate web_sys;
 extern crate urlparse;
 extern crate serde_wasm_bindgen;
 
-use std::collections::{VecDeque, HashSet};
+use std::collections::{VecDeque, HashSet, HashMap};
 
 use wasm_bindgen::prelude::*;
 use serde::ser::{Serialize, Serializer, SerializeStruct};
@@ -113,9 +113,17 @@ impl Crawler {
                 break;
             }
         }
+        let hash_set_roots: HashSet<String> = self.roots.clone().into_iter().collect();
         let hash_set_queue: HashSet<String> = self.q.clone().into_iter().collect();
-        let union: HashSet<_> = self.seen_urls.union(&hash_set_queue).collect();
-        serde_wasm_bindgen::to_value::<HashSet<&String>>(&union).unwrap()
+        let union: HashSet<String> = self.seen_urls.union(&hash_set_queue).cloned().collect();
+        let data = HashMap::from([
+            ("roots", hash_set_roots),
+            ("root_domains", self.root_domains.clone()),
+            ("queue", hash_set_queue),
+            ("seen", self.seen_urls.clone()),
+            ("result", union)
+        ]);
+        serde_wasm_bindgen::to_value::<HashMap<&str, HashSet<String>>>(&data).unwrap()
     }
 
     pub async fn fetch(&mut self, url: String) {
