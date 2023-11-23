@@ -43,6 +43,7 @@ pub struct Crawler {
     q: VecDeque<String>,
     root_domains: HashSet<String>,
     seen_urls: HashSet<String>,
+    errors: HashSet<String>,
 }
 
 #[wasm_bindgen]
@@ -51,20 +52,23 @@ impl Crawler {
     pub fn new() -> Crawler {
         utils::set_panic_hook();
         let roots = vec![];
-        let root_domains = HashSet::new();
+        let default = HashSet::new();
         let queue = VecDeque::new();
         Crawler {
             roots: roots,
             q: queue,
-            root_domains: root_domains.clone(),
-            seen_urls: root_domains.clone()
+            root_domains: default.clone(),
+            seen_urls: default.clone(),
+            errors: default.clone()
         }
     }
 
     pub fn init_roots(&mut self) {
         // parse urls 
         let mut root_domains: HashSet<String> = HashSet::new();
-        // let re = Regex::new(r"\A[\d\.]*\Z").unwrap(); // Match IP address: 192.168.0.1
+        let re = Regex::new(r"^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z]{2,})+$").unwrap();
+        // let re = Regex::new(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z]{2,})+$").unwrap();
+        // let re = Regex::new(r#"^((?!-)[A-Za-z0-9-]{1,63}(?<!-)\\.)+[A-Za-z]{2,6}"#).unwrap();
         for root in &self.roots {
             // fix url
             let _root: String;
@@ -85,13 +89,18 @@ impl Crawler {
             } else if netloc_list_len == 1 {
                 host = netloc_list[0].to_string();
             }
+
             if host.is_empty() {
                 continue
             }
-            if !host.starts_with("https://") {
-                host = "https://".to_string() + &host;
+            let is_match = re.is_match(&host);
+            if is_match {
+                if !host.starts_with("https://") {
+                    host = "https://".to_string() + &host;
+                }
+                root_domains.insert(host.to_lowercase());
             }
-            root_domains.insert(host.to_lowercase());
+            
         }
         self.root_domains = root_domains;
     }
@@ -115,13 +124,15 @@ impl Crawler {
         }
         let hash_set_roots: HashSet<String> = self.roots.clone().into_iter().collect();
         let hash_set_queue: HashSet<String> = self.q.clone().into_iter().collect();
-        let union: HashSet<String> = self.seen_urls.union(&hash_set_queue).cloned().collect();
+        let union: HashSet<String> = hash_set_queue.difference(&self.seen_urls).cloned().collect();
+        let queued: HashSet<String> = hash_set_queue.difference(&hash_set_roots).cloned().collect();
         let data = HashMap::from([
             ("roots", hash_set_roots),
             ("root_domains", self.root_domains.clone()),
-            ("queue", hash_set_queue),
+            ("queue", queued),
             ("seen", self.seen_urls.clone()),
-            ("result", union)
+            ("result", union),
+            ("errors", self.errors.clone())
         ]);
         serde_wasm_bindgen::to_value::<HashMap<&str, HashSet<String>>>(&data).unwrap()
     }
@@ -152,18 +163,19 @@ impl Crawler {
                                 self.q.push_back(u);
                             }
                             self.seen_urls.insert(url);
+                            self.errors.clear();
                         }
-                        Err(e) => {
-                            web_sys::console::error_1(
-                                &format!("Error making request: {:?}", e).into()
+                        Err(_) => {
+                            self.errors.insert(
+                                "Error making request. Check if domain is valid/network and try again!".to_string()
                             );
                         }
                     }
                 }
             }
-            Err(err) => {
-                web_sys::console::error_1(
-                    &format!("Error making request: {:?}", err).into()
+            Err(_) => {
+                self.errors.insert(
+                    "Error making request. Check if domain is valid/network and try again!".to_string()
                 );
             }
         };
