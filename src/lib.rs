@@ -96,7 +96,7 @@ impl Crawler {
             let is_match = re.is_match(&host);
             if is_match {
                 if !host.starts_with("https://") {
-                    host = "https://".to_string() + &host;
+                    host = "http://".to_string() + &host;
                 }
                 root_domains.insert(host.to_lowercase());
             }
