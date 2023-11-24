@@ -96,7 +96,7 @@ impl Crawler {
             let is_match = re.is_match(&host);
             if is_match {
                 if !host.starts_with("https://") {
-                    host = "http://".to_string() + &host;
+                    host = "https://".to_string() + &host;
                 }
                 root_domains.insert(host.to_lowercase());
             }
@@ -138,8 +138,7 @@ impl Crawler {
     }
 
     pub async fn fetch(&mut self, url: String) {
-        let parsed_url = vec![url.clone()];
-        let proxified = format!("http://54.82.39.43/crawl?url={parsed_url:?}");
+        let proxified = format!("http://54.82.39.43/crawl");
         let mut tries = 0;
         let mut response = None;
 
