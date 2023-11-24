@@ -138,7 +138,8 @@ impl Crawler {
     }
 
     pub async fn fetch(&mut self, url: String) {
-        let proxified = format!("http://54.82.39.43/crawl?url={}", url);
+        let parsed_url = vec![url.clone()];
+        let proxified = format!("http://127.0.0.1:5000/crawl?url={parsed_url:?}");
         let mut tries = 0;
         let mut response = None;
 
