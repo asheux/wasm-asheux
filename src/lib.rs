@@ -53,7 +53,7 @@ impl Main {
         match route {
             "/" => dict_instance.get_tags(),
             "/about" => "About page".to_string().into(),
-            "/projects" => "Project Crawl".to_string().into(),
+            "/crawler" => "Project Crawl".to_string().into(),
             "/view_cv" => "PDF Data".to_string().into(),
             mapped_route if mapped_route == route => String::new().into(),
             _ => "Page not found".to_string().into(),

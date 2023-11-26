@@ -226,8 +226,23 @@ impl Crawler {
         return nlink.to_string();
     }
 
-    pub fn set_roots(&mut self, roots_str: &str) {
+    pub fn reset(&mut self) {
+        // Reset things
+        self.q.clear();
+        self.seen_urls.clear();
+        self.roots.clear();
+        self.root_domains.clear();
+    }
+
+    pub fn set_roots(&mut self, mut roots_str: &str) {
         // Set the user url inputs to the crawler
+        if !roots_str.is_empty() {
+            // clear queue
+            self.reset();
+            if roots_str == "reset".to_string() {
+                roots_str = "";
+            }
+        }
         let roots = roots_str.split(",").map(|s| s.into());
         self.roots = roots.collect::<Vec<_>>();
     }
