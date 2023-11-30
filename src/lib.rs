@@ -51,7 +51,7 @@ impl Main {
         let dict_instance = dictionary::Dictionary::new();
 
         match route {
-            "/" => dict_instance.get_tags(),
+            "/" => dict_instance.get_articles_data(),
             "/about" => "About page".to_string().into(),
             "/crawler" => "Project Crawl".to_string().into(),
             "/view_cv" => "PDF Data".to_string().into(),
