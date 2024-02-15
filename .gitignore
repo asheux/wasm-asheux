@@ -10,3 +10,5 @@ wasm-pack.log
 # Vim stuff
 *.sw?
 .env
+
+.DS_Store
