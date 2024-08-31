@@ -118,7 +118,7 @@ impl Crawler {
     }
 
     pub async fn fetch(&mut self, url: String) {
-        let proxified = format!("https://api.asheux.com/crawl?url={}", url);
+        let proxified = format!("https://tccup-api.onpicme.com/crawl?url={}", url);
         let mut tries = 0;
         let mut response = None;
 
