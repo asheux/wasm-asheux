@@ -37,7 +37,7 @@ impl Main {
             route = route[0..route.len() - 1].to_string();
         }
         Main { 
-            name: "Brian Mboya".to_string(),
+            name: "Brian Ashiundu".to_string(),
             route: route
         }
     }
