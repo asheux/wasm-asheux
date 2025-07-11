@@ -32,6 +32,10 @@ features = [
   'console',
 ]
 
+[dependencies.wasm-bindgen]
+version = "0.2"
+features = ["bulk-memory"]
+
 [dependencies.regex]
 version = "1.10.2"
 default-features = false
