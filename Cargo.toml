@@ -11,7 +11,7 @@ crate-type = ["cdylib", "rlib"]
 default = ["console_error_panic_hook"]
 
 [dependencies]
-wasm-bindgen = { version = "0.2.84", features = ["bulk-memory"] }
+wasm-bindgen = "0.2.84"
 urlparse = "0.7.3"
 wasm-bindgen-futures = '0.4'
 reqwest = "0.11"
