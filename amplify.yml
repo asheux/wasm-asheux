@@ -9,10 +9,10 @@ frontend:
         - wasm-pack build
         - cd asheux
         - npm ci
-        - npm install
     # IMPORTANT - Please verify your build commands
     build:
-      commands: 
+      commands:
+        - cd asheux
         - npm run build
   artifacts:
     # IMPORTANT - Please verify your build output directory
