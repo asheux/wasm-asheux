@@ -12,7 +12,6 @@ frontend:
     # IMPORTANT - Please verify your build commands
     build:
       commands:
-        - cd asheux
         - npm run build
   artifacts:
     # IMPORTANT - Please verify your build output directory
