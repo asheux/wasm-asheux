@@ -43,7 +43,7 @@ impl Dictionary {
             "Could a meme make mind?", "F**k red & blue. I want the green pill",
             "The Prison", "The Hidden World", "Love and The Universe",
             "The City", "The Universe Within", "Save Yourselves",
-            "The RTC", "Unexplored light",
+            "The RTC", "Unexplored light", "The Hunt",
         ].into_iter().map(|i| i.to_string()).collect();
 
         let programing_tags: Vec<String> = vec![
@@ -71,6 +71,7 @@ impl Dictionary {
             "15,Poetry,Consciousness,Imagination",
             "16,Poetry,Imagination,Consciousness,Unknown",
             "17,Poetry,Otherworlds,Minds,Consciousness,TheoryOfMind",
+            "22,Poetry,God,Humanity,FreeWill,Supernatural",
         ].into_iter().map(|i| i.to_string()).collect();
 
         let programing_dictionaries: Vec<Dictionary> = programing_names.into_iter().zip(programing_tags)
